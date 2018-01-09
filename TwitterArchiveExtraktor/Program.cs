@@ -3,69 +3,115 @@
 	using System;
 	using System.Collections.Concurrent;
 	using System.Collections.Generic;
-	using System.Dynamic;
 	using System.IO;
 	using System.Text;
 	using System.Threading.Tasks;
 	using ICSharpCode.SharpZipLib.BZip2;
-	using Newtonsoft.Json;
 	using Newtonsoft.Json.Linq;
 
 	public class Program
 	{
+		private static ConcurrentDictionary<string, int> Hashtags = new ConcurrentDictionary<string, int>();
+
+		private static object locker = new Object();
+
 		public static string BasePath => @"C:\Users\Christoph\Downloads\archiveteam-twitter-stream-2015-05\";
 
 		public static string OutputPath => @"C:\Users\Christoph\Downloads\archiveteam-twitter-stream-2015-05\";
 
-		private static object locker = new Object();
+		public static void IterateOverDays()
+		{
+			// 4. ExportTweetsWithHashtags
+			TweetByHashtagExporter exporter =
+				new TweetByHashtagExporter(BasePath, new List<string> { "sheet1.csv", "sheet2.csv", "sheet3.csv" });
 
-		private static ConcurrentDictionary<string,int> Hashtags = new ConcurrentDictionary<string, int>();
+			foreach (string day in Directory.GetDirectories(BasePath))
+			{
+				string dayName = new DirectoryInfo(day).Name;
+				foreach (string hour in Directory.GetDirectories(day))
+				{
+					string hourName = new DirectoryInfo(hour).Name;
+
+					Parallel.ForEach(Directory.GetFiles(hour, "*.bz2"), (minute) =>
+						//foreach (string minute in Directory.GetFiles(hour, "*.bz2"))
+					{
+						string minuteName = new DirectoryInfo(minute).Name.Substring(0, 2);
+
+						//Console.WriteLine($"==> day: {day}, hour: {hour}, minute: {minute}");
+						using (FileStream zippedFile = File.OpenRead(minute))
+						{
+							using (MemoryStream memoryStream = new MemoryStream())
+							{
+								BZip2.Decompress(zippedFile, memoryStream, true);
+
+								string minuteUnzipped = Encoding.UTF8.GetString(memoryStream.ToArray());
+
+								// 1.
+								//ExtractTweets(minuteUnzipped, dayName, hourName);
+
+								// 2.
+								//CountTweets(minuteUnzipped, dayName, hourName, minuteName);
+
+								// 3.
+								//CountHashtags(minuteUnzipped, dayName, hourName, minuteName);
+
+								// 4.
+								exporter.ExportTweetsWithHashtags(minuteUnzipped);
+							}
+						}
+					});
+
+					Console.WriteLine($"{dayName}.May - {hourName}:00 finished.");
+				}
+			}
+
+			// 3. CountHashtags
+			//WriteHashtags();
+		}
 
 		public static void Main(string[] args)
 		{
 			IterateOverDays();
 		}
 
-		private static void ExtractTweets(string tweets, string day, string hour)
+		private static void CountHashtags(string tweets, string day, string hour, string minute)
 		{
-			string[] lines = tweets.Split(
-				new[] { Environment.NewLine },
-				StringSplitOptions.None
-			);
-
-			List<string> outputLines = new List<string>();
+			string[] lines = tweets.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
 
 			foreach (string line in lines)
 			{
-				//Console.WriteLine(line.Substring(0, 120));
-
 				if (line.StartsWith("{\"created_at\":"))
 				{
 					dynamic tweet = JObject.Parse(line);
 
 					if (tweet.lang == "en")
 					{
-						//Console.WriteLine($"tweet id: {tweet.id}, created at: {tweet.created_at}, text: {tweet.text}");
-
-						outputLines.Add(tweet.text.ToString());
+						if (tweet.entities.hashtags.Count > 0)
+						{
+							foreach (dynamic hashtag in tweet.entities.hashtags)
+							{
+								string tag = hashtag.text.ToString().ToLower();
+								if (Program.Hashtags.ContainsKey(tag))
+								{
+									Program.Hashtags[tag] = ++Program.Hashtags[tag];
+								}
+								else
+								{
+									Program.Hashtags[tag] = 1;
+								}
+							}
+						}
 					}
 				}
 			}
-
-			string filename = OutputPath + $"text-{day}-{hour}.txt";
-
-			File.AppendAllLines(filename, outputLines);
 		}
 
 		private static void CountTweets(string tweets, string day, string hour, string minute)
 		{
-			string[] lines = tweets.Split(
-				new[] { Environment.NewLine },
-				StringSplitOptions.None
-			);
+			string[] lines = tweets.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
 
 			List<string> outputLines = new List<string>();
-			int totalTweets=0, englishTweets=0, englishTweetsWithHashtags = 0, englishTweetsWithUserMentions = 0;
+			int totalTweets = 0, englishTweets = 0, englishTweetsWithHashtags = 0, englishTweetsWithUserMentions = 0;
 
 			foreach (string line in lines)
 			{
@@ -91,50 +137,43 @@
 				}
 			}
 
-			outputLines.Add($"{day},{hour},{minute},{totalTweets},{englishTweets},{englishTweetsWithHashtags},{englishTweetsWithUserMentions}");
+			outputLines.Add(
+				$"{day},{hour},{minute},{totalTweets},{englishTweets},{englishTweetsWithHashtags},{englishTweetsWithUserMentions}");
 
 			string filename = OutputPath + "count.txt";
 
-			lock (locker)
+			lock (Program.locker)
 			{
 				File.AppendAllLines(filename, outputLines);
 			}
 		}
 
-		private static void CountHashtags(string tweets, string day, string hour, string minute)
+		private static void ExtractTweets(string tweets, string day, string hour)
 		{
-			string[] lines = tweets.Split(
-				new[] { Environment.NewLine },
-				StringSplitOptions.None
-			);
+			string[] lines = tweets.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+
+			List<string> outputLines = new List<string>();
 
 			foreach (string line in lines)
 			{
+				//Console.WriteLine(line.Substring(0, 120));
+
 				if (line.StartsWith("{\"created_at\":"))
 				{
 					dynamic tweet = JObject.Parse(line);
 
 					if (tweet.lang == "en")
 					{
+						//Console.WriteLine($"tweet id: {tweet.id}, created at: {tweet.created_at}, text: {tweet.text}");
 
-						if (tweet.entities.hashtags.Count > 0)
-						{
-							foreach (dynamic hashtag in tweet.entities.hashtags)
-							{
-								string tag = hashtag.text.ToString().ToLower();
-								if (Program.Hashtags.ContainsKey(tag))
-								{
-									Program.Hashtags[tag] = ++Hashtags[tag];
-								}
-								else
-								{
-									Program.Hashtags[tag] = 1;
-								}
-							}
-						}
+						outputLines.Add(tweet.text.ToString());
 					}
 				}
 			}
+
+			string filename = OutputPath + $"text-{day}-{hour}.txt";
+
+			File.AppendAllLines(filename, outputLines);
 		}
 
 		private static void WriteHashtags()
@@ -148,43 +187,6 @@
 			string filename = OutputPath + "countHashtags.txt";
 
 			File.AppendAllLines(filename, outputLines);
-		}
-
-		private static void IterateOverDays()
-		{
-			foreach (string day in Directory.GetDirectories(BasePath))
-			{
-				string dayName = new DirectoryInfo(day).Name;
-				foreach (string hour in Directory.GetDirectories(day))
-				{
-					string hourName = new DirectoryInfo(hour).Name;
-
-					Parallel.ForEach(Directory.GetFiles(hour, "*.bz2"), (minute) =>
-					//foreach (string minute in Directory.GetFiles(hour, "*.bz2"))
-					{
-						string minuteName = new DirectoryInfo(minute).Name.Substring(0,2);
-
-						//Console.WriteLine($"==> day: {day}, hour: {hour}, minute: {minute}");
-						using (FileStream zippedFile = File.OpenRead(minute))
-						{
-							using (MemoryStream memoryStream = new MemoryStream())
-							{
-								BZip2.Decompress(zippedFile, memoryStream, true);
-
-								string minuteUnzipped = Encoding.UTF8.GetString(memoryStream.ToArray());
-
-								//ExtractTweets(minuteUnzipped, dayName, hourName);
-								//CountTweets(minuteUnzipped, dayName, hourName, minuteName);
-								CountHashtags(minuteUnzipped, dayName, hourName, minuteName);
-							}
-						}
-					});
-
-					Console.WriteLine($"{dayName}.May - {hourName}:00 finished.");
-				}
-			}
-
-			WriteHashtags();
 		}
 	}
 }
