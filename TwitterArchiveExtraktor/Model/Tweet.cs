@@ -11,5 +11,9 @@
 		public string Text { get; set; }
 
 		public string Username { get; set; }
+
+		public double X { get; set; }
+
+		public double Y { get; set; }
 	}
 }
