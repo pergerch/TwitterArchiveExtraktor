@@ -49,7 +49,7 @@
 								string minuteUnzipped = Encoding.UTF8.GetString(memoryStream.ToArray());
 
 								// 1.
-								//ExtractTweets(minuteUnzipped, dayName, hourName);
+								ExtractTweets(minuteUnzipped, dayName, hourName);
 
 								// 2.
 								//CountTweets(minuteUnzipped, dayName, hourName, minuteName);
@@ -61,7 +61,7 @@
 								//exporter.ExportTweetsWithHashtags(minuteUnzipped);
 
 								// 5.
-								ExtractGeoTweets(minuteUnzipped, dayName, hourName);
+								//ExtractGeoTweets(minuteUnzipped, dayName, hourName);
 							}
 						}
 					});
@@ -157,7 +157,8 @@
 		{
 			string[] lines = tweets.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
 
-			List<string> outputLines = new List<string>();
+			//List<string> outputLines = new List<string>();
+			List<Tweet> output = new List<Tweet>();
 
 			foreach (string line in lines)
 			{
@@ -170,15 +171,53 @@
 					if (tweet.lang == "en")
 					{
 						//Console.WriteLine($"tweet id: {tweet.id}, created at: {tweet.created_at}, text: {tweet.text}");
+						//outputLines.Add(tweet.text.ToString());
 
-						outputLines.Add(tweet.text.ToString());
+						string text = tweet.text.ToString();
+						bool retweet = false;
+						if (tweet.retweeted_status != null)
+						{
+							text = tweet.retweeted_status.text.ToString();
+							retweet = true;
+						}
+
+						output.Add(new Tweet
+						{
+							Id = tweet.id,
+							CreatedAt = tweet.created_at,
+							Username = tweet.user.screen_name,
+							Text = text,
+							Retweet = retweet
+						});
+
 					}
 				}
 			}
 
-			string filename = OutputPath + $"text-{day}-{hour}.txt";
+			//string filename = OutputPath + $"text-{day}-{hour}.txt";
 
-			File.AppendAllLines(filename, outputLines);
+			//lock (locker)
+			//{
+			//	File.AppendAllLines(filename, outputLines);
+			//}
+
+			string filename = OutputPath + $"texts.csv";
+
+			lock (locker)
+			{
+				if (output.Count > 0)
+				{
+					using (TextWriter writer = File.AppendText(filename))
+					{
+						CsvWriter csv = new CsvWriter(writer);
+						csv.Configuration.SanitizeForInjection = false;
+						csv.Configuration.HasHeaderRecord = false;
+						csv.Configuration.Delimiter = ";";
+						csv.WriteRecords(output);
+					}
+				}
+			}
+
 		}
 
 		private static void ExtractGeoTweets(string tweets, string day, string hour)
@@ -197,18 +236,58 @@
 
 					if (tweet.lang == "en")
 					{
-						if (tweet.coordinates != null)
+						string text = tweet.text.ToString();
+						bool retweet = false;
+						if (tweet.retweeted_status != null)
 						{
-							output.Add(new Tweet
+							text = tweet.retweeted_status.text.ToString();
+							retweet = true;
+						}
+
+						if (tweet.coordinates != null || tweet.place != null)
+						{
+							try
 							{
-								Id = tweet.id,
-								//Hashtag = String.Join("|", tweet.entities?.hashtags?.  text.ToString(),
-								CreatedAt = tweet.created_at,
-								Username = tweet.user.screen_name,
-								Text = tweet.text.ToString(),
-								Y = tweet.coordinates.coordinates[0],
-								X = tweet.coordinates.coordinates[1]
-							});
+								if (tweet.coordinates != null)
+								{
+									output.Add(new Tweet
+									{
+										Id = tweet.id,
+										//Hashtag = String.Join("|", tweet.entities?.hashtags?.text.ToString(),
+										CreatedAt = tweet.created_at,
+										Username = tweet.user.screen_name,
+										Text = text,
+										Retweet = retweet,
+										X = tweet.coordinates.coordinates[1],
+										Y = tweet.coordinates.coordinates[0],
+										Comment = "Exact Coordinate"
+									});
+								}
+								else if (tweet?.place?.bounding_box?.coordinates != null)
+								{
+									Tuple<double, double> xy = CoordinatesHelper.GetAverageXY(tweet.place.bounding_box.coordinates);
+									output.Add(new Tweet
+									{
+										Id = tweet.id,
+										//Hashtag = String.Join("|", tweet.entities?.hashtags?.text.ToString(),
+										CreatedAt = tweet.created_at,
+										Username = tweet.user.screen_name,
+										Text = text,
+										Retweet = retweet,
+										X = xy.Item1,
+										Y = xy.Item2,
+										Comment = "Place: " + tweet.place.full_name
+									});
+								}
+							}
+							catch (Exception e)
+							{
+								ConsoleColor foregroundColor = Console.ForegroundColor;
+								Console.ForegroundColor = ConsoleColor.Red;
+								Console.WriteLine(e);
+
+								Console.ForegroundColor = foregroundColor;
+							}
 						}
 					}
 				}
