@@ -4,6 +4,7 @@
 	using System.Collections.Concurrent;
 	using System.Collections.Generic;
 	using System.IO;
+	using System.Linq;
 	using System.Text;
 	using System.Threading.Tasks;
 	using CsvHelper;
@@ -76,7 +77,43 @@
 
 		public static void Main(string[] args)
 		{
-			IterateOverDays();
+			//IterateOverDays();
+
+			RemoveDuplicates(BasePath, new List<string> { "ex_sheet2.csv", "ex_sheet1.csv", "ex_sheet3.csv", "ex_sheet4.csv", "GeoTweetsWithinQGIS.csv" });
+		}
+
+		private static void RemoveDuplicates(string basePath, List<string> files)
+		{
+			List<Tweet> existingTweets = new List<Tweet>();
+
+			foreach (string file in files)
+			{
+				using (StreamReader reader = File.OpenText(basePath + "\\" + file))
+				{
+					// Read all tweets from csv file
+					CsvReader csv = new CsvReader(reader);
+					csv.Configuration.HasHeaderRecord = true;
+					csv.Configuration.Delimiter = ";";
+					IEnumerable<Tweet> fileTweets = csv.GetRecords<Tweet>().ToList();
+
+					// Get all tweets from the current file that are not yet in the full set
+					IEnumerable<Tweet> uniqueFileTweets = fileTweets.Where(x => existingTweets.All(y => y.Id != x.Id)).ToList();
+
+					Console.WriteLine($"File: {file}\t| total: {fileTweets.Count()}\t| unique: {uniqueFileTweets.Count()}");
+
+					// Export them
+					using (TextWriter writer = File.AppendText(basePath + "\\new_" + file))
+					{
+						CsvWriter csvWriter = new CsvWriter(writer);
+						csvWriter.Configuration.SanitizeForInjection = false;
+						csvWriter.Configuration.HasHeaderRecord = false;
+						csvWriter.Configuration.Delimiter = ";";
+						csvWriter.WriteRecords(uniqueFileTweets);
+					}
+
+					existingTweets.AddRange(uniqueFileTweets);
+				}
+			}
 		}
 
 		private static void CountHashtags(string tweets, string day, string hour, string minute)
