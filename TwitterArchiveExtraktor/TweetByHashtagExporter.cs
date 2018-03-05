@@ -24,7 +24,7 @@
 			foreach (string csvFilename in csvFilenames)
 			{
 				string[] hashtags = File.ReadAllLines(basePath + "\\" + csvFilename);
-				this.hashtagCategories.Add(csvFilename, hashtags.ToList());
+				this.hashtagCategories.Add(csvFilename, hashtags.Select(x => x.ToLower()).ToList());
 			}
 		}
 
@@ -56,14 +56,33 @@
 							string tag = hashtag.text.ToString().ToLower();
 							if (hashtagCategory.Value.Contains(tag))
 							{
+								string comment = null;
+								bool retweet = false;
+								if (tweet.retweeted_status != null)
+								{
+									comment = tweet.retweeted_status.text.ToString();
+									retweet = true;
+								}
+
 								tweetExport[hashtagCategory.Key].Add(new Tweet
 								{
 									Id = tweet.id,
 									Hashtag = tag,
 									CreatedAt = tweet.created_at,
 									Username = tweet.user.screen_name,
-									Text = tweet.text.ToString()
+									Text = tweet.text.ToString(),
+									Comment = comment,
+									Retweet = retweet
 								});
+
+								//tweetExport[hashtagCategory.Key].Add(new Tweet
+								//{
+								//	Id = tweet.id,
+								//	Hashtag = tag,
+								//	CreatedAt = tweet.created_at,
+								//	Username = tweet.user.screen_name,
+								//	Text = tweet.text.ToString()
+								//});
 							}
 						}
 					}

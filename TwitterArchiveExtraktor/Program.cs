@@ -24,8 +24,8 @@
 		public static void IterateOverDays()
 		{
 			// 4. ExportTweetsWithHashtags
-			//TweetByHashtagExporter exporter =
-			//	new TweetByHashtagExporter(BasePath, new List<string> { "sheet1.csv", "sheet2.csv", "sheet3.csv" });
+			TweetByHashtagExporter exporter =
+				new TweetByHashtagExporter(BasePath, new List<string> { "sheet1.csv", "sheet2.csv", "sheet3.csv", "sheet4.csv" });
 
 			foreach (string day in Directory.GetDirectories(BasePath))
 			{
@@ -49,7 +49,7 @@
 								string minuteUnzipped = Encoding.UTF8.GetString(memoryStream.ToArray());
 
 								// 1.
-								ExtractTweets(minuteUnzipped, dayName, hourName);
+								//ExtractTweets(minuteUnzipped, dayName, hourName);
 
 								// 2.
 								//CountTweets(minuteUnzipped, dayName, hourName, minuteName);
@@ -58,7 +58,7 @@
 								//CountHashtags(minuteUnzipped, dayName, hourName, minuteName);
 
 								// 4.
-								//exporter.ExportTweetsWithHashtags(minuteUnzipped);
+								exporter.ExportTweetsWithHashtags(minuteUnzipped);
 
 								// 5.
 								//ExtractGeoTweets(minuteUnzipped, dayName, hourName);
